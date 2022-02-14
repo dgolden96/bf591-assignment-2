@@ -11,16 +11,16 @@
 # The bioconductor repository has installation instructions for biomaRt: 
 # https://bioconductor.org/install/
 
-if (!require("BiocManager", quietly = TRUE)){
 
-}
-if (!require("biomaRt", quietly = TRUE)){
-
-}
 # load tidyverse and your new bioconductor package
-library()
-library()
-
+library(tidyr)
+library(biomaRt)
+library(readr)
+library(dplyr)
+library(tibble)
+library(stringr)
+library(tidyverse)
+library(ggplot2)
 #### Loading and processing data ####
 #' Load Expression Data
 #'
@@ -36,7 +36,8 @@ library()
 #' @examples 
 #' `data <- load_expression('/project/bf528/project_1/data/example_intensity_data.csv')`
 load_expression <- function(filepath) {
-  return(NULL)
+  result = read_delim(filepath, delim=' ', col_names=TRUE)
+  return(result)
 }
 
 #' Filter 15% of the gene expression values.
@@ -44,7 +45,7 @@ load_expression <- function(filepath) {
 #' @param tibble A tibble of expression values, rows by probe and columns by sample.
 #'
 #' @return A tibble of affymetrix probe names from the input expression data tibble. 
-#' These names match the rows with 15% or more of the expression values about log2(15).
+#' These names match the rows with 15% or more of the expression values above log2(15).
 #' 
 #' @details This is similar to the filters being implemented in BF528's project 1. 
 #' We do not necessarily want to capture all parts of the assay in our analysis, so 
@@ -55,8 +56,12 @@ load_expression <- function(filepath) {
 #' `tibble [40,158 × 1] (S3: tbl_df/tbl/data.frame)`
 #' `$ probeids: chr [1:40158] "1007_s_at" "1053_at" "117_at" "121_at" ...`
 filter_15 <- function(tibble){
-  return()
+  result <- dplyr::mutate(tibble, count = rowSums(tibble > log(15,2)))
+  filt_expr <- dplyr::filter(result, count > 5.0)
+  probe_vec <- filt_expr$probeids
+  return(as_tibble(probe_vec))
 }
+# this gives me 40,160 rows, 2 more than expected
 
 #### Gene name conversion ####
 
@@ -83,7 +88,14 @@ filter_15 <- function(tibble){
 #' `4        1553551_s_at      MT-ND2`
 #' `5           202860_at     DENND4B`
 affy_to_hgnc <- function(affy_vector) {
-  return()
+  ensembl <- useEnsembl(biomart = "ENSEMBL_MART_ENSEMBL", 
+                        dataset = "hsapiens_gene_ensembl",
+                        mirror = 'useast')
+  BM_result <- getBM(attributes = c("affy_hg_u133_plus_2", "hgnc_symbol"),
+        filters = 'affy_hg_u133_plus_2',
+        values = affy_vector, 
+        mart = ensembl)
+  return(BM_result)
 }
 
 #### ggplot ####
@@ -118,8 +130,31 @@ affy_to_hgnc <- function(affy_vector) {
 #' `1 202860_at   DENND4B good        7.16      ...`
 #' `2 204340_at   TMEM187 good        6.40      ...`
 reduce_data <- function(expr_tibble, names_ids, good_genes, bad_genes){
-  return()
+  good_bad <- c(good_genes, bad_genes) 
+    # vector of good and bad gene HGNCs
+  sel_probe_indices <- which(names_ids$hgnc_symbol %in% good_bad)
+    # vector of indices in sample_name where we find good and bad genes
+  good_bad_probes <- names_ids %>% slice(sel_probe_indices)
+    # make a slice of sample_names with only the selected rows
+  sel_expr_row_indices <- which(expr_tibble$probeids %in% good_bad_probes$affy_hg_u133_plus_2)
+    # vector of indices in expr dataframe where probe ID matches good/bad genes
+  sel_filt_expr <- expr_tibble %>% slice(sel_expr_row_indices)
+    # tibble of expression data and probe ids for only the selected probes
+  sel_filt_expr <- add_column(sel_filt_expr, hgnc = good_bad_probes$hgnc_symbol, .after = 'probeids') #
+  bool_vec <- character()
+  for (i in sel_filt_expr$hgnc){
+    if (i %in% good_genes){
+      bool_vec <- append(bool_vec, 'Good')
+    }
+    else{
+      bool_vec <- append(bool_vec, 'Bad')
+    }
+  }
+  result_tibble <- add_column(sel_filt_expr, gene_set = bool_vec, .after = 'hgnc')
+  result_tibble <- dplyr::arrange(result_tibble,gene_set)
+  return(result_tibble)
 }
+
 
 #' Plot a boxplot of good and bad genes.
 #'
@@ -134,6 +169,16 @@ reduce_data <- function(expr_tibble, names_ids, good_genes, bad_genes){
 #'
 #' @examples `p <- plot_ggplot(plot_tibble)`
 plot_ggplot <- function(tibble) {
-  return()
+  all_col <- colnames(tibble)
+  sample_columns <- all_col[4:38]
+  PIVOT = tidyr::pivot_longer(tibble, sample_columns, names_to='Sample', values_to='Expression')
+  PIVOT_new <- dplyr::arrange(PIVOT, gene_set)
+  PIVOT %>% mutate(hgnc = factor(PIVOT$hgnc, levels = unique(PIVOT_new$hgnc), order=T)) -> PIVOT
+  ggplot(data=PIVOT, mapping=aes(x=hgnc, y=Expression, fill=gene_set)) +
+    geom_boxplot() +
+    scale_fill_manual(breaks=PIVOT$gene_set, values=c("#DF2935", "#71B48D")) +
+    labs(title = "Expression of 'good' and 'bad' Genes") + 
+    theme(axis.text = element_text(angle = 45)) +
+    theme(plot.title = element_text(hjust = 0.5))
 }
 

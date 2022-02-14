@@ -1,7 +1,7 @@
 ---
 title: "Assignment 2 Report"
-author: ""
-date: "1/1/2022"
+author: "Daniel Golden"
+date: "2/13/2022"
 output: html_document
 ---
 
@@ -78,7 +78,7 @@ Our first step is to source our `main.R` script to load our completed functions,
 ```{r Source and load data}
 # use source to load your functions from main.R into this document.
 source("main.R")
-expr <- load_expression("/project/bf528/project_1/data/example_intensity_data.csv")
+expr <- load_expression('C:/Users/dango/Documents/R/bf591-assignment-2/data/example_intensity_data.zip')
 head(expr)
 ```
 
@@ -87,6 +87,7 @@ Next, we apply the `filter_15()` function to eliminate some rows from out data. 
 filter_15(expr) %>%
 affy_to_hgnc() -> sample_names
 head(sample_names)
+# this worked perfectly earlier; I can only assume that the error I'm getting is due to server issues
 ```
 
 Finally, we use a pseudo-random selection of 8 "good" and 8 "bad" genes to compare expression levels (I just picked which is which on a whim, apologies if I called your favorite gene a bad gene). We use `reduce_data()` to create a tibble of **only** the good and bad genes. Note that some genes may correspond to multiple probes, as in you could have multiple rows for gene gene. Finally, we create a box plot and add some nice visual bells and whistles using `plot_ggplot()`. See how well you can recreate it! The colors I chose were `c("#DF2935", "#71B48D")`.
@@ -99,5 +100,6 @@ plot_tibble <- reduce_data(expr_tibble = expr,
                            badGenes)
 head(plot_tibble)
 plot_ggplot(plot_tibble)
+# I am aware that the data points here appear to be different than those used in the reference report. I have done all that I can to examine my code and the manner in which I filtered rows, but I cannot account for the discrepancy. I am certain, however, that I am only using rows associated with genes in the provided lists.
 ```
 
